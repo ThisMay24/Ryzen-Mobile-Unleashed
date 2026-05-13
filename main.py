@@ -15,7 +15,6 @@ from threading import Thread
 from datetime import datetime
 from tkinter import messagebox
 
-# --- 1. FUNGSI ADMINISTRATOR & AUTO-START ---
 def is_admin():
     try: return ctypes.windll.shell32.IsUserAnAdmin()
     except: return False
@@ -39,7 +38,6 @@ def set_autostart(status=True):
 
 set_autostart(True)
 
-# --- 2. LOGIKA DETEKSI HARDWARE ---
 def get_cpu_info():
     try:
         c = wmi.WMI()
@@ -49,7 +47,6 @@ def get_cpu_info():
     except:
         return "AMD Ryzen Processor", False
 
-# --- 3. LOCK FILE & RESOURCE PATH ---
 LOCK_FILE = os.path.join(os.getenv('TEMP'), "ryzen_unleashed.lock")
 if os.path.exists(LOCK_FILE):
     try: os.remove(LOCK_FILE)
@@ -73,7 +70,6 @@ load_custom_font(FONT_FILE_PATH)
 RYZENADJ_PATH = get_resource_path("ryzenadj.exe")
 ICON_PATH = get_resource_path("iconapp.ico")
 
-# --- 4. DATA EULA ---
 EULA_DATA = {
     "Indonesia": {
         "title": "Persetujuan Lisensi Pengguna Akhir",
@@ -174,7 +170,6 @@ class EulaWindow(ctk.CTk):
         app = RyzenUnleashed(selected_lang) 
         app.mainloop()
 
-# --- 5. APLIKASI UTAMA ---
 APP_NAME = "RYZEN MOBILE UNLEASHED"
 CONFIG_FILE = "config.json"
 
