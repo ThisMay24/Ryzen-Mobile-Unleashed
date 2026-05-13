@@ -15,6 +15,7 @@ from threading import Thread
 from datetime import datetime
 from tkinter import messagebox
 
+# --- 1. FUNGSI ADMINISTRATOR & AUTO-START ---
 def is_admin():
     try: return ctypes.windll.shell32.IsUserAnAdmin()
     except: return False
@@ -38,6 +39,7 @@ def set_autostart(status=True):
 
 set_autostart(True)
 
+# --- 2. LOGIKA DETEKSI HARDWARE ---
 def get_cpu_info():
     try:
         c = wmi.WMI()
@@ -47,6 +49,7 @@ def get_cpu_info():
     except:
         return "AMD Ryzen Processor", False
 
+# --- 3. LOCK FILE & RESOURCE PATH ---
 LOCK_FILE = os.path.join(os.getenv('TEMP'), "ryzen_unleashed.lock")
 if os.path.exists(LOCK_FILE):
     try: os.remove(LOCK_FILE)
@@ -70,6 +73,7 @@ load_custom_font(FONT_FILE_PATH)
 RYZENADJ_PATH = get_resource_path("ryzenadj.exe")
 ICON_PATH = get_resource_path("iconapp.ico")
 
+# --- 4. DATA EULA ---
 EULA_DATA = {
     "Indonesia": {
         "title": "Persetujuan Lisensi Pengguna Akhir",
@@ -87,7 +91,7 @@ EULA_DATA = {
             "- Peningkatan konsumsi daya baterai.\n"
             "- Aktivasi sistem keamanan hardware (Thermal Throttling) jika suhu mencapai batas kritis.\n\n"
             "3. Pembebasan Tanggung Jawab (Disclaimer)\n"
-            "Pengembang (Ezar Meifian Fahreza) tidak bertanggung jawab atas segala bentuk kerusakan "
+            "Pengembang tidak bertanggung jawab atas segala bentuk kerusakan "
             "hardware, kehilangan data, atau penurunan masa pakai komponen yang diakibatkan oleh "
             "penggunaan aplikasi yang tidak bijak. Seluruh risiko penggunaan sepenuhnya ditanggung Pengguna.\n\n"
             "4. Kewajiban Pengguna\n"
@@ -114,7 +118,7 @@ EULA_DATA = {
             "- Increased battery power consumption.\n"
             "- Activation of hardware safety systems (Thermal Throttling) if temperatures reach critical limits.\n\n"
             "3. Disclaimer of Liability\n"
-            "The Developer (Ezar Meifian Fahreza) is not responsible for any hardware damage, "
+            "The Developer is not responsible for any hardware damage, "
             "data loss, or component lifespan reduction caused by improper use.\n\n"
             "4. User Obligations\n"
             "- Always monitor system temperatures via the monitoring panel.\n"
@@ -170,6 +174,7 @@ class EulaWindow(ctk.CTk):
         app = RyzenUnleashed(selected_lang) 
         app.mainloop()
 
+# --- 5. APLIKASI UTAMA ---
 APP_NAME = "RYZEN MOBILE UNLEASHED"
 CONFIG_FILE = "config.json"
 
@@ -223,12 +228,12 @@ class RyzenUnleashed(ctk.CTk):
         self.hw_window = None
         
         self.protocol('WM_DELETE_WINDOW', self.hide_window)
-        self.create_tray_icon()
-
+        
         self.main_container = ctk.CTkScrollableFrame(self, fg_color="transparent", corner_radius=0)
         self.main_container.pack(fill="both", expand=True)
 
         self.setup_ui()
+        self.create_tray_icon() # Dipindahkan setelah setup_ui agar series_var sudah ada
         self.update_presets_ui(self.series_var.get())
         self.change_language(self.current_lang)
         self.update_monitoring()
@@ -373,13 +378,33 @@ class RyzenUnleashed(ctk.CTk):
         color = "#ff4444" if w > self.safe_limit else ("#000000", "#ffffff")
         self.watt_label.configure(text=f"{w} WATT", text_color=color)
 
+    # --- PERBAIKAN FITUR TRAY ICON ---
     def create_tray_icon(self):
         try: img = Image.open(ICON_PATH)
         except: img = Image.new('RGB', (64, 64), color=(255, 68, 68))
+        
+        def tray_apply(v):
+            # Menggunakan self.after agar fungsi dipanggil di main thread GUI
+            return lambda: self.after(0, self.set_preset, v)
+
         self.tray_icon = pystray.Icon("RyzenUnleashed", img, APP_NAME)
+        
+        # Menu akan update secara dinamis saat tray diklik kanan
         self.tray_icon.menu = pystray.Menu(
-            pystray.MenuItem("Show App", self.show_window, default=True),
-            pystray.MenuItem("Exit", self.exit_application)
+            pystray.MenuItem("Show App", lambda: self.after(0, self.show_window), default=True),
+            pystray.MenuItem("Quick Profiles (U)", pystray.Menu(
+                pystray.MenuItem("ECO (10W)", tray_apply(10)),
+                pystray.MenuItem("NORMAL (15W)", tray_apply(15)),
+                pystray.MenuItem("STABLE (20W)", tray_apply(20)),
+                pystray.MenuItem("MAX (35W)", tray_apply(35))
+            )),
+            pystray.MenuItem("Quick Profiles (H)", pystray.Menu(
+                pystray.MenuItem("ECO (25W)", tray_apply(25)),
+                pystray.MenuItem("NORMAL (35W)", tray_apply(35)),
+                pystray.MenuItem("STABLE (45W)", tray_apply(45)),
+                pystray.MenuItem("MAX (65W)", tray_apply(65))
+            )),
+            pystray.MenuItem("Exit", lambda: self.after(0, self.exit_application))
         )
         Thread(target=self.tray_icon.run, daemon=True).start()
 
@@ -418,10 +443,10 @@ class RyzenUnleashed(ctk.CTk):
 
     def apply_tdp(self, w):
         t = LANGUAGES[self.current_lang]
-        mw = str(w * 1000)
+        mw = str(int(w) * 1000)
         try:
             subprocess.run(f'"{RYZENADJ_PATH}" --stapm-limit={mw} --fast-limit={mw} --slow-limit={mw}', shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            self.add_log(t["success"].format(w))
+            self.add_log(t["success"].format(int(w)))
         except: self.add_log(t["error"])
 
     def confirm_and_apply(self):
@@ -430,7 +455,11 @@ class RyzenUnleashed(ctk.CTk):
         if w > self.safe_limit and not messagebox.askyesno(t["warn_title"], t["warn_msg"].format(w)): return
         self.apply_tdp(w)
 
-    def set_preset(self, v): self.slider.set(v); self.update_slider_ui(v); self.confirm_and_apply()
+    def set_preset(self, v): 
+        self.slider.set(v)
+        self.update_slider_ui(v)
+        self.apply_tdp(v)
+
     def reset_settings(self): self.slider.set(self.default_tdp); self.update_slider_ui(self.default_tdp); self.apply_tdp(self.default_tdp)
 
     def show_hw_info(self):
